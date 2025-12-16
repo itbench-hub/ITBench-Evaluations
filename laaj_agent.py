@@ -139,14 +139,8 @@ class LAAJAgent:
         with mathematical calculations left as placeholders. Includes retry logic for rate limiting.
         """
         laaj_logger.info(f"Invoking LLM for reasoning for incident {state.get('incident_id')}, trial {state.get('trial_id')}")
-        incident_guidance = self._build_incident_guidance(state.get("incident_id"))
-        eval_prompt = prompts.EVALUATE_PROMPT_TEMPLATE.format(
-            ground_truth=json.dumps(state["ground_truth"], indent=2),
-            generated_response=json.dumps(state["generated_response"], indent=2),
-            incident_specific_guidance=incident_guidance,
-        )
-
         
+
         if state["args"].eval_criteria:
             SELECTED_EVAL_CRITERIA = []
             for criterion in EVAL_CRITERIA:
@@ -154,6 +148,16 @@ class LAAJAgent:
                     SELECTED_EVAL_CRITERIA.append(criterion)
         else:
             SELECTED_EVAL_CRITERIA = EVAL_CRITERIA
+        
+        if "ROOT_CAUSE_REASONING" in SELECTED_EVAL_CRITERIA:
+            incident_guidance = self._build_incident_guidance(state.get("incident_id"))
+        else:
+            incident_guidance = ""
+        eval_prompt = prompts.EVALUATE_PROMPT_TEMPLATE.format(
+            ground_truth=json.dumps(state["ground_truth"], indent=2),
+            generated_response=json.dumps(state["generated_response"], indent=2),
+            incident_specific_guidance=incident_guidance,
+        )
 
         eval_prompts = {}
         eval_output_formats = {}
