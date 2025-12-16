@@ -1,0 +1,17 @@
+langchain>=0.1.0
+langchain-openai>=0.0.5
+langgraph>=0.0.20
+langchain-core>=0.1.0
+openai>=1.0.0 
+git+ssh://git@github.ibm.com/agent-analytics/sdk.git@release
+dotenv
+asteval==1.0.6
+streamlit
+google-api-core
+bespokelabs-curator
+seaborn
+matplotlib
+numpy
+pandas
+plotly
+scipy
