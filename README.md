@@ -59,7 +59,6 @@ The runner loads a ground-truth JSON file, repairs malformed agent responses whe
 python runner.py \
   --gt path/to/ground_truth.json \
   --agent-outputs path/to/agent-outputs \
-  --k 3 \
   --eval_criteria ROOT_CAUSE_ENTITY ROOT_CAUSE_REASONING
 ```
 
