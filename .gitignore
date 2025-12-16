@@ -141,8 +141,6 @@ Thumbs.db
 
 # Configuration files (if local and sensitive)
 # Consider adding specific config files if they should not be versioned
-# For example, if velos.ini contains sensitive local data:
-# src/gideon/velos.ini
 # Or more generally:
 *.ini
 
@@ -159,7 +157,6 @@ deployments/ansible/outputs/
 
 # Personal Ansible configuration
 deployments/ansible/my_local_vars.yml
-*data/
 *plots/
 *curator/
 
