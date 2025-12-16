@@ -33,9 +33,9 @@ The runner loads a ground-truth JSON file, repairs malformed agent responses whe
 2. **Configure environment variables**
    Copy `env_example.txt` to `.env` or export the variables manually. At minimum you need an API key for the agent LLM.
 
-   | Purpose | Keys (checked in this order) |
+   | Purpose | Keys|
    | --- | --- |
-   | Agent LLM (required) | `AGENT_LLM_API_KEY`
+   | Agent LLM | `AGENT_LLM_API_KEY`
    | Agent model / endpoint | `AGENT_LLM_MODEL`, `AGENT_LLM_BASE_URL`, `AGENT_LLM_AZURE_DEPLOYMENT`, plus optional `AGENT_LLM_TEMPERATURE`, `AGENT_LLM_MAX_TOKENS` |
    | Logging | `AGENT_ANALYTICS_LOGS_DIR` (defaults to `logs/`) |
 
