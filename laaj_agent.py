@@ -225,6 +225,14 @@ class LAAJAgent:
                     self.agent_llm.ainvoke(messages, config=metadata_config),
                     timeout=api_timeout_seconds
                 )
+
+                content_str = response.content
+                if "```json" in content_str:
+                    content_str = content_str.split("```json")[1].split("```")[0].strip()
+            
+                # Step 1: Parse the JSON string from the LLM
+                data = json.loads(content_str)
+
                 laaj_logger.info(f"LLM call successful for incident {state.get('incident_id')}, trial {state.get('trial_id')}")
                 return {"messages": [response]}
 
@@ -252,11 +260,25 @@ class LAAJAgent:
                     return {"messages": [AIMessage(content=error_content)]}
                 
                 await asyncio.sleep(retry_delay_seconds)
+            
+            except json.JSONDecodeError as e:
+                laaj_logger.warning(
+                    f"LaaJ generated invalid JSON {state.get('incident_id')}, trial {state.get('trial_id')} "
+                    f"(attempt {attempt + 1}/{max_retries}). Waiting {retry_delay_seconds}s."
+                )
+                if attempt + 1 >= max_retries:
+                    laaj_logger.error(f"Max retries reached for incident {state.get('incident_id')}. Failing this evaluation.")
+                    error_content = f'{{"error": "LLM call failed due to invalid json response: {e}"}}'
+                    return {"messages": [AIMessage(content=error_content)]}
+                
+                await asyncio.sleep(retry_delay_seconds)
 
             except Exception as e:
                 laaj_logger.error(f"Unhandled error during LLM call for incident {state.get('incident_id')}: {e}", exc_info=True)
                 error_content = f'{{"error": "LLM call failed with an unexpected error: {e}"}}'
                 return {"messages": [AIMessage(content=error_content)]}
+            
+
 
         # This should theoretically not be reached if the loop handles all cases
         final_error_content = f'{{"error": "LLM call failed after all retries for incident {state.get("incident_id")}"}}'
