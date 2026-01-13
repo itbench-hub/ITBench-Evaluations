@@ -1,7 +1,6 @@
 # ITBench Evaluations
 
-A toolkit for running **LAAJ (LLM-as-a-Judge)** evaluations on root cause analysis (RCA) agent outputs.  
-The runner loads a ground-truth JSON file, repairs malformed agent responses when needed, adjudicates multiple metrics through the LAAJ agent, aggregates pass@1 / macro averages, and emits detailed JSON + log artifacts for each batch of incidents.
+Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysis (RCA) agent outputs. The CLI loads ground-truth scenarios, reads agent trial outputs, repairs malformed JSON when possible, scores multiple metrics with a judge model, and aggregates macro statistics.
 
 ---
 
@@ -9,14 +8,17 @@ The runner loads a ground-truth JSON file, repairs malformed agent responses whe
 
 | Path | Description |
 | --- | --- |
-| `runner.py` | CLI entrypoint that orchestrates loading data, running the LAAJ agent asynchronously, writing logs, and aggregating results. |
-| `laaj_agent.py` | LangGraph-based workflow that calls the configured LLM with the prompts in `prompts/` to grade each metric. |
-| `loader.py` | Discovers incident/trial folders, loads `agent_output.json` or `agent_response.json`, and repairs malformed JSON via `json_fixer.py`. |
-| `aggregator.py` | Computes per-incident and macro statistics (mean, stderr, pass@1) for the metrics listed below. |
-| `connection.py` | Creates agent LLM clients (OpenAI, Azure OpenAI, or LiteLLM proxy) using environment variables. |
-| `prompts/` | Contains the system prompts, per-metric templates, JSON output schemas, and optional incident-specific guidance. |
-| `data/` | Example incident output hierarchy (`incident_id/trial/outputs/agent_output.json`). |
-| `env_example.txt` | Sample configuration for pointing the agent at a LiteLLM proxy. |
+| `itbench_evaluations/__main__.py` | CLI entrypoint (`python -m itbench_evaluations`). |
+| `itbench_evaluations/agent.py` | Judge workflow and evaluation logic |
+| `itbench_evaluations/client.py` | OpenAI-compatible judge client and model selection. |
+| `itbench_evaluations/loader.py` | Ground-truth and agent output loading.|
+| `itbench_evaluations/aggregator.py` | Computes per-incident and overall statistics. |
+| `itbench_evaluations/json_fixer.py` | JSON repair utilities for malformed model outputs. |
+| `itbench_evaluations/namespace_filter.py` | Optional post-processing helpers for filtering and recalculating metrics. |
+| `itbench_evaluations/prompts/` | System prompts and per-metric templates. |
+| `itbench_evaluations/data/` | Example incident output hierarchy. |
+| `env_example.txt` | Sample `.env` entries for judge configuration. |
+| `requirements.txt` | Python dependencies. |
 
 ---
 
@@ -31,73 +33,82 @@ The runner loads a ground-truth JSON file, repairs malformed agent responses whe
    ```
 
 2. **Configure environment variables**
-   Copy `env_example.txt` to `.env` or export the variables manually. At minimum you need an API key for the agent LLM.
+   The judge client reads `.env` via `python-dotenv`. Set at least:
 
-   | Purpose | Keys|
+   | Purpose | Keys |
    | --- | --- |
-   | Agent LLM | `AGENT_LLM_API_KEY`
-   | Agent model / endpoint | `AGENT_LLM_MODEL`, `AGENT_LLM_BASE_URL`, `AGENT_LLM_AZURE_DEPLOYMENT`, plus optional `AGENT_LLM_TEMPERATURE`, `AGENT_LLM_MAX_TOKENS` |
-   | Logging | `AGENT_ANALYTICS_LOGS_DIR` (defaults to `logs/`) |
+   | Judge API | `JUDGE_API_KEY` (defaults to `"dummy"` for local endpoints) |
+   | Judge model | `JUDGE_MODEL` (defaults to `gpt-4-turbo`) |
+   | Optional base URL | `JUDGE_BASE_URL` (OpenAI-compatible endpoint) |
 
 3. **Prepare data**
-   - **Ground truth JSON** – an array of incidents, each containing at least `id`, `groups`, `propagations`, and optional `aliases`.
-   - **Agent outputs** – directory structured as:
-     ```
-     agent-outputs/
-       <incident_id>/
-         <trial_number>/
-           outputs/agent_output.json
-           # or outputs/agent_response.json
-     ```
-     Each JSON file should match the schema expected by the prompts; malformed files are automatically repaired via `json_fixer.py` (LLM first, simple heuristics second). Unreadable and missing files are counted as bad runs.
+   **Ground truth** supports:
+   - A single JSON/YAML file with one incident (must include `id` or the filename is used).
+   - A JSON/YAML list of incidents (each must include `id`).
+   - A directory of scenario subfolders containing `ground_truth.yaml|yml|json` (or `gt.yaml|json`).
+   - A consolidated `ground_truths.json` inside a directory.
+
+   **Agent outputs** should be structured as:
+   ```
+   agent-outputs/
+     <incident_id>/
+       <trial_number>/
+         outputs/agent_output.json
+         # or outputs/agent_response.json
+         # or agent_output.json / agent_response.json
+   ```
+   Supported incident folder naming is case-insensitive and accepts patterns like
+   `scenario-i<id>`, `scenario_<id>`, `scenario-<id>`, `scenario<id>`, and `incident-<id>`.
 
 ---
 
 ## Running evaluations
 
 ```bash
-python runner.py \
-  --gt path/to/ground_truth.json \
-  --agent-outputs path/to/agent-outputs \
-  --eval_criteria ROOT_CAUSE_ENTITY ROOT_CAUSE_REASONING
+python -m itbench_evaluations \
+  --ground-truth path/to/ground_truths.json \
+  --outputs path/to/agent-outputs \
+  --eval-criteria ROOT_CAUSE_ENTITY ROOT_CAUSE_REASONING
 ```
 
-- `--incident` limits the run to a single incident directory.
-- `--model` overrides `AGENT_LLM_MODEL` for the session.
-- `--k` configures the `ROOT_CAUSE_ENTITY_K` metric (default `3`).
-- `--eval_criteria` lets you grade a subset of metrics; omit to run all available criteria.
-- Evaluations are throttled to 10 concurrent requests to help avoid rate limits.
-
-### Outputs
-
-- Structured results are emitted to `laaj_evaluation_incident_<id>.json` or `laaj_evaluation_all_incidents_<timestamp>.json`.  
-  The payload mirrors the console dump:
-  ```json
-  {
-    "statistics": {
-      "per_incident": { ... },
-      "overall": {
-        "root_cause_entity_precision": {"mean": 0.58, "stderr": 0.04, "pass@1": 0.42},
-        "total_bad_runs": 3
-      }
-    },
-    "results": [
-      {"incident_id": "1", "evaluations": [...], "total_bad_runs": 1}
-    ]
-  }
-  ```
-- Logs: general run logs plus agent-facing reasoning logs go to `logs/` (or `AGENT_ANALYTICS_LOGS_DIR`). Each run creates:
-  - `laaj_agent_logs_<timestamp>.log`
-  - `agent_analytics_sdk_logs_<timestamp>.log`
+Key options:
+- `--result-file` sets the output file (default: `evaluation_results.json`).
+- `--eval-criteria` accepts: `ROOT_CAUSE_ENTITY`, `ROOT_CAUSE_REASONING`, `PROPAGATION_CHAIN`,
+  `FAULT_LOCALIZATION`, `ROOT_CAUSE_REASONING_PARTIAL`, `ROOT_CAUSE_PROXIMITY`,
+  `ROOT_CAUSE_PROXIMITY_FP`.
+- `--k` is kept for backward compatibility (entity@k metrics are derived from `ROOT_CAUSE_ENTITY`).
+- `--max-concurrent` controls evaluation concurrency (default: 5).
+- `--verbose` enables debug logging.
 
 ---
+
+## Outputs
+
+The CLI writes a JSON report containing raw results and aggregated statistics:
+```json
+{
+  "raw_results": [
+    {"incident_id": "1", "trial_id": 0, "scores": { "...": "..." }}
+  ],
+  "statistics": {
+    "per_incident": { "...": "..." },
+    "overall": { "...": "..." }
+  },
+  "config": {
+    "ground_truth_path": "...",
+    "outputs_path": "...",
+    "eval_criteria": ["..."],
+    "k": 3
+  }
+}
+```
 
 ## Metrics covered
 
 `aggregator.py` computes macro-level mean, stderr, and pass@1 (for categorical metrics) for the following:
 
 - `root_cause_entity` (precision/recall/F1 + pass@1): Whether the correct root cause entity was identified
-- `root_cause_entity_k` (precision/recall/F1 + pass@1, configurable `k`): Whether the correct root cause entity was identified in the first k model predictions
+- `root_cause_entity_k` (precision/recall/F1 + pass@1, configurable `k`): Whether the correct root cause entity was identified in the first k=(1,..,5) model predictions
 - `root_cause_reasoning`: Whether the reasoning for the root cause was correct (0, 0.5 or 1).
 - `propagation_chain`: Scores the full propagation chain
 - `fault_localization_component_identification`: Checks if the model correctly identified the first semantic component to exhibit a significant failure symptom

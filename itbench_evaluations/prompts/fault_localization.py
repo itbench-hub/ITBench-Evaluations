@@ -1,3 +1,5 @@
+"""Fault localization evaluation prompts."""
+
 FAULT_LOCALIZATION_PROMPT = """**{id}. Fault Localization Component Identification (Strict)
 
 * **Logic:** A true/false (1/0) metric that checks if the model correctly identified the **first semantic component to exhibit a significant failure symptom** (e.g., errors, high latency, resource saturation), as described in the ground truth propagation effects. This distinguishes between simple state changes and actual service degradation.
@@ -31,3 +33,5 @@ FAULT_LOCALIZATION_OUTPUT_FORMAT = """"fault_localization_component_identificati
             }
         },
         """
+
+

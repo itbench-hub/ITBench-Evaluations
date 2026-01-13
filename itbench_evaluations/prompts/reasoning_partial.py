@@ -1,3 +1,5 @@
+"""Partial reasoning evaluation prompts."""
+
 ROOT_CAUSE_REASONING_PARTIAL_PROMPT = """**{id}. Root Cause Reasoning, Partial (Partial Credit)**
 
   * **Logic:** This metric provides a more forgiving score for reasoning. For each model root cause entity `i`, if `i` matches a ground truth root cause entity, this score is same as the `entity_i_reasoning_score`. Otherwise, it awards partial credit if the model correctly analyzed a downstream symptom when it missed the root cause entity.
@@ -16,10 +18,11 @@ ROOT_CAUSE_REASONING_PARTIAL_PROMPT = """**{id}. Root Cause Reasoning, Partial (
   * **Output:** Max over all root cause entities as a `calculator_tool` expression.
   * **Justification:** Explain the score based on the method. If partial credit was calculated, detail the `hop_away` and `SymptomReasoningCorrectness`.
   """
+
 ROOT_CAUSE_REASONING_PARTIAL_OUTPUT_FORMAT = """"root_cause_reasoning_partial": {
     "calculation": "calculator_tool(expression='max(pc_1 , pc_2 , … , pc_M)')",
-    "justification": "Entity “Valve_A”: Metric 1 was correct, so we copy Metric 2’s score (pc_1 = 1). "
-                     "Entity “Sensor_B”: Metric 1 was wrong but the symptom lies 2 hops away on the contracted path; "
+    "justification": "Entity "Valve_A": Metric 1 was correct, so we copy Metric 2's score (pc_1 = 1). "
+                     "Entity "Sensor_B": Metric 1 was wrong but the symptom lies 2 hops away on the contracted path; "
                      "SymptomReasoningCorrectness = 0.5. Partial credit pc_2 = (1/(1+2))*0.5. "
                      "Average score = calculator_tool(expression='max(1 , (1/(1+2))*0.5)').",
     "details": [
@@ -40,3 +43,5 @@ ROOT_CAUSE_REASONING_PARTIAL_OUTPUT_FORMAT = """"root_cause_reasoning_partial": 
     ]
   },
   """
+
+

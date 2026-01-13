@@ -1,3 +1,5 @@
+"""Propagation chain evaluation prompts."""
+
 PROPAGATION_CHAIN_PROMPT = """**{id}. Fault Propagation Chain Accuracy (Partial Credit) **
   * **Logic:**  It evaluates the model's ability to identify the causal path and establishes the **semantic components**, and **contracted paths**. It is scored using an F1-score.
   * **Method:**
@@ -29,3 +31,5 @@ PROPAGATION_CHAIN_OUTPUT_FORMAT = """"propagation_chain": {
           "calculation": "calculator_tool(expression='2 * (1.0 * 0.66) / (1.0 + 0.66)')"
       },
       """
+
+

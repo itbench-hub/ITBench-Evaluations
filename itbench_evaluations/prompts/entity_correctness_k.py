@@ -1,3 +1,5 @@
+"""Entity correctness @k evaluation prompts."""
+
 ROOT_CAUSE_ENTITY_K_PROMPT = """**{id}. Root Cause Entity Identification@k (Strict)**
 
   * **Logic:** Compare the root cause (contributing factor) entities in the `Generated Response` against the GROUND TRUTH:
@@ -28,3 +30,5 @@ ROOT_CAUSE_ENTITY_K_OUTPUT_FORMAT = """"root_cause_entity_k": {
         "details": { ... }
       },
       """
+
+

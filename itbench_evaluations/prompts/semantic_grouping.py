@@ -1,3 +1,5 @@
+"""Semantic grouping prompts for propagation chain evaluation."""
+
 SEMANTIC_GROUPING_PROMPT = """
 ### **Phase 2: Creating Contracted Propagations**
       * **a. Define Semantic Components (CRITICAL LOGIC):**
@@ -21,3 +23,5 @@ SEMANTIC_GROUPING_PROMPT = """
 
 NO_SEMANTIC_GROUPING_PROMPT = """
 ### **Phase 2: Scoring Rubric**"""
+
+

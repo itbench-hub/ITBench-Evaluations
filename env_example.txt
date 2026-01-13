@@ -1,4 +1,0 @@
-export AGENT_LLM_API_TYPE="litellm"
-export AGENT_LLM_BASE_URL="https://ete-litellm.bx.cloud9.ibm.com"
-export AGENT_LLM_API_KEY=""
-export AGENT_LLM_AZURE_DEPLOYMENT="GCP/gemini-2.5-pro"

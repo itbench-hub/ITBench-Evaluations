@@ -1,3 +1,5 @@
+"""Reasoning correctness evaluation prompts."""
+
 REASONING_CORRECTNESS_STEPS = """Steps to compute entity_i_reasoning score: 
         i. Extract the `condition` of every correct root cause entity from the Generated Response.
         ii. Extract the `condition` of the corresponding entities from the Ground Truth.
@@ -37,3 +39,5 @@ ROOT_CAUSE_REASONING_OUTPUT_FORMAT = """"root_cause_reasoning": {
         "details": { ... }
       },
       """
+
+
