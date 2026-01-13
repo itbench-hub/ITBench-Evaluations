@@ -28,8 +28,6 @@ class CalculationError(Exception):
 
 EVAL_CRITERIA = [
     "ROOT_CAUSE_ENTITY",
-    # ROOT_CAUSE_ENTITY_K removed - k-metrics are now computed mathematically 
-    # from per-entity matches in ROOT_CAUSE_ENTITY output
     "ROOT_CAUSE_REASONING",
     "PROPAGATION_CHAIN",
     "FAULT_LOCALIZATION",

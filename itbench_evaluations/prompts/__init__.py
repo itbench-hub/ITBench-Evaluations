@@ -5,10 +5,6 @@ from .entity_correctness import (
     ROOT_CAUSE_ENTITY_OUTPUT_FORMAT,
     ROOT_CAUSE_ENTITY_PROMPT,
 )
-from .entity_correctness_k import (
-    ROOT_CAUSE_ENTITY_K_OUTPUT_FORMAT,
-    ROOT_CAUSE_ENTITY_K_PROMPT,
-)
 from .fault_localization import (
     FAULT_LOCALIZATION_OUTPUT_FORMAT,
     FAULT_LOCALIZATION_PROMPT,
