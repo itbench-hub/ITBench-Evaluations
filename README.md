@@ -17,8 +17,8 @@ Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysi
 | `itbench_evaluations/namespace_filter.py` | Optional post-processing helpers for filtering and recalculating metrics. |
 | `itbench_evaluations/prompts/` | System prompts and per-metric templates. |
 | `itbench_evaluations/data/` | Example incident output hierarchy. |
-| `env_example.txt` | Sample `.env` entries for judge configuration. |
-| `requirements.txt` | Python dependencies. |
+| `.env.tmpl` | Environment configuration template (copy to `.env`). |
+| `pyproject.toml` | Python package configuration and dependencies. |
 
 ---
 
@@ -26,14 +26,16 @@ Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysi
 
 1. **Install prerequisites**
    ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install --upgrade pip
-   pip install -r requirements.txt
+   uv sync
    ```
 
 2. **Configure environment variables**
-   The judge client reads `.env` via `python-dotenv`. Set at least:
+   ```bash
+   cp .env.tmpl .env
+   # Edit .env with your actual values
+   ```
+
+   The judge client reads `.env` via `python-dotenv`. Required variables:
 
    | Purpose | Keys |
    | --- | --- |
@@ -65,7 +67,7 @@ Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysi
 ## Running evaluations
 
 ```bash
-python -m itbench_evaluations \
+uv run itbench-evaluations \
   --ground-truth path/to/ground_truths.json \
   --outputs path/to/agent-outputs \
   --eval-criteria ROOT_CAUSE_ENTITY ROOT_CAUSE_REASONING
