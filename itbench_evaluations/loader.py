@@ -156,8 +156,9 @@ def load_ground_truth(path: str) -> Dict[str, Dict[str, Any]]:
                 return {str(item["id"]): item for item in data}
             return {str(data["id"]): data}
 
-        # Scan for scenario subdirectories (ITBench-Snapshots structure)
+        # Scan for scenario subdirectories (ITBench-Lite structure)
         # Expected: path/<scenario_id>/ground_truth.yaml
+        # Download ITBench-Lite from: https://huggingface.co/datasets/ibm-research/ITBench-Lite
         logger.info(f"Scanning directory for scenario ground truths: {path}")
         for scenario_dir in sorted(path.iterdir()):
             if scenario_dir.is_dir():

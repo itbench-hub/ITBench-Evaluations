@@ -34,8 +34,9 @@ def parse_args():
         required=True,
         help=(
             "Path to ground truth. Supports: "
-            "(1) Directory with per-scenario subdirs (e.g., ITBench-Snapshots/<id>/ground_truth.yaml), "
-            "(2) Single JSON/YAML file with all ground truths"
+            "(1) Directory with per-scenario subdirs (e.g., ITBench-Lite/snapshots/sre/v0.2-.../Scenario-X/ground_truth.yaml), "
+            "(2) Single JSON/YAML file with all ground truths. "
+            "Download ITBench-Lite from: https://huggingface.co/datasets/ibm-research/ITBench-Lite"
         ),
     )
 

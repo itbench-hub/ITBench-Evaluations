@@ -27,6 +27,9 @@ Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysi
 1. **Install prerequisites**
    ```bash
    uv sync
+
+   # Install huggingface_hub for downloading datasets
+   uv pip install huggingface_hub
    ```
 
 2. **Configure environment variables**
@@ -43,7 +46,27 @@ Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysi
    | Judge model | `JUDGE_MODEL` (defaults to `gpt-4-turbo`) |
    | Optional base URL | `JUDGE_BASE_URL` (OpenAI-compatible endpoint) |
 
-3. **Prepare data**
+3. **Download ITBench-Lite dataset**
+
+   Download benchmark scenarios from Hugging Face (https://huggingface.co/datasets/ibm-research/ITBench-Lite):
+
+   ```bash
+   # Download all scenarios (50 total: 35 SRE + 15 FinOps)
+   uv run hf download \
+     ibm-research/ITBench-Lite \
+     --repo-type dataset \
+     --local-dir ./ITBench-Lite
+
+   # Or download only specific scenarios (faster for testing)
+   uv run hf download \
+     ibm-research/ITBench-Lite \
+     --repo-type dataset \
+     --include "snapshots/sre/v0.2-*/Scenario-1/*" \
+     --include "snapshots/sre/v0.2-*/Scenario-2/*" \
+     --local-dir ./ITBench-Lite
+   ```
+
+4. **Prepare data**
    **Ground truth** supports:
    - A single JSON/YAML file with one incident (must include `id` or the filename is used).
    - A JSON/YAML list of incidents (each must include `id`).
