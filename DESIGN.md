@@ -102,6 +102,7 @@ Each file defines prompts for one evaluation criterion:
 - `fault_localization.py`: FAULT_LOCALIZATION
 - `reasoning_partial.py`: ROOT_CAUSE_REASONING_PARTIAL
 - `proximity.py` / `proximity_fp.py`: ROOT_CAUSE_PROXIMITY variants
+- `remediation_plan.py`: REMEDIATION_PLAN (adequacy of remediation actions)
 
 ### `client.py` - LLM Client
 
@@ -280,6 +281,7 @@ This is tracked via the `matched_to` field in `predicted_entities`.
 | `fault_localization_component_identification` | Component-level identification score |
 | `root_cause_reasoning_partial` | Partial credit for reasoning |
 | `root_cause_proximity_*` | Distance-based scoring variants |
+| `remediation_plan` | Score (0.0-1.0): how well does the remediation plan address ground truth recommended actions? |
 
 ## Design Decisions
 
@@ -293,6 +295,13 @@ The LLM judge outputs per-entity match data (not just aggregate scores) so that:
 ### Why Namespace Filtering?
 
 Infrastructure namespaces (kube-system, prometheus, etc.) contain monitoring and platform components. When an agent reports these as "root causes," it's technically true (they're involved in the incident) but not useful. Filtering improves precision while maintaining recall for application-level root causes.
+
+### Why Separate itbench_evaluations from itbench_leaderboard?
+
+- **Reusability**: Evaluation logic can be used outside the leaderboard context
+- **Testing**: Evaluation can be unit tested without leaderboard infrastructure
+- **Modularity**: Different leaderboards can share the same evaluation logic
+- **Clarity**: Clear separation between "how to evaluate" and "how to orchestrate"
 
 ## Adding New Evaluation Criteria
 
@@ -315,4 +324,3 @@ Infrastructure namespaces (kube-system, prometheus, etc.) contain monitoring and
 - [ ] Caching of LLM evaluations for identical inputs
 - [ ] Parallel evaluation within a single agent output
 - [ ] Support for additional LLM providers beyond OpenAI-compatible APIs
-

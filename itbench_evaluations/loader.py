@@ -4,50 +4,13 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import yaml
 
 from .json_fixer import simple_json_repair
 
 logger = logging.getLogger("itbench_evaluations.loader")
-
-
-def _resolve_incident_dir(output_dir: Path, incident_id: str) -> Optional[Path]:
-    """Resolve incident directory using multiple naming conventions (case-insensitive)."""
-    direct = output_dir / incident_id
-    if direct.exists():
-        return direct
-
-    if not output_dir.exists():
-        return None
-
-    candidates = [
-        incident_id,
-        f"scenario-i{incident_id}",
-        f"scenario_{incident_id}",
-        f"scenario-{incident_id}",
-        f"scenario{incident_id}",
-        f"incident-{incident_id}",
-        f"incident_{incident_id}",
-    ]
-
-    name_map = {}
-    for entry in output_dir.iterdir():
-        if entry.is_dir():
-            name_map.setdefault(entry.name.lower(), entry)
-
-    for candidate in candidates:
-        match = name_map.get(candidate.lower())
-        if match:
-            logger.info(
-                "Resolved incident directory %s -> %s",
-                incident_id,
-                match.name,
-            )
-            return match
-
-    return None
 
 
 def canonicalize_scenario_id(name: str) -> str:
@@ -156,9 +119,8 @@ def load_ground_truth(path: str) -> Dict[str, Dict[str, Any]]:
                 return {str(item["id"]): item for item in data}
             return {str(data["id"]): data}
 
-        # Scan for scenario subdirectories (ITBench-Lite structure)
+        # Scan for scenario subdirectories (ITBench-Snapshots structure)
         # Expected: path/<scenario_id>/ground_truth.yaml
-        # Download ITBench-Lite from: https://huggingface.co/datasets/ibm-research/ITBench-Lite
         logger.info(f"Scanning directory for scenario ground truths: {path}")
         for scenario_dir in sorted(path.iterdir()):
             if scenario_dir.is_dir():
@@ -190,9 +152,7 @@ def load_ground_truth(path: str) -> Dict[str, Dict[str, Any]]:
                         result[canonical_id] = data
                         # Also store original dir name for path lookups
                         data["_dir_name"] = scenario_dir.name
-                        logger.debug(
-                            f"Loaded ground truth for scenario: {scenario_dir.name} -> {canonical_id}"
-                        )
+                        logger.debug(f"Loaded ground truth for scenario: {scenario_dir.name} -> {canonical_id}")
                         break
 
         if result:
@@ -227,25 +187,20 @@ async def load_agent_outputs(
     """
     outputs = []
     bad_runs = 0
-    incident_dir = _resolve_incident_dir(Path(output_dir), incident_id)
+    incident_dir = Path(output_dir) / incident_id
 
     logger.debug(f"Looking for agent outputs in: {incident_dir}")
 
-    if incident_dir is None or not incident_dir.exists():
-        logger.warning(
-            f"No directory found for incident {incident_id} under {output_dir}"
-        )
+    if not incident_dir.exists():
+        logger.warning(f"No directory found for incident {incident_id} at {incident_dir}")
         return outputs, bad_runs
 
     # Find all trial directories (directories with numeric names)
     trial_dirs = sorted(
-        [d for d in incident_dir.iterdir() if d.is_dir() and d.name.isdigit()],
-        key=lambda d: int(d.name),
+        [d for d in incident_dir.iterdir() if d.is_dir() and d.name.isdigit()], key=lambda d: int(d.name)
     )
 
-    logger.debug(
-        f"Found {len(trial_dirs)} trial directories for incident {incident_id}"
-    )
+    logger.debug(f"Found {len(trial_dirs)} trial directories for incident {incident_id}")
 
     for trial_dir in trial_dirs:
         # Try multiple possible file locations
@@ -273,9 +228,7 @@ async def load_agent_outputs(
 
                     # Handle case where JSON contains a markdown-wrapped string
                     if isinstance(output_data, str):
-                        logger.debug(
-                            "Output data is a string, attempting to extract JSON"
-                        )
+                        logger.debug("Output data is a string, attempting to extract JSON")
                         if "```json" in output_data:
                             json_start = output_data.find("```json") + 7
                             json_end = output_data.rfind("```")
@@ -284,6 +237,39 @@ async def load_agent_outputs(
                                 output_data = json.loads(json_str)
                         else:
                             output_data = json.loads(output_data)
+
+                    # Load remediation plan if it exists
+                    remediation_candidates = [
+                        trial_dir / "outputs" / "agent_remediation.json",
+                        trial_dir / "agent_remediation.json",
+                    ]
+
+                    for rem_file in remediation_candidates:
+                        if rem_file.exists():
+                            try:
+                                with open(rem_file) as rf:
+                                    rem_content = rf.read()
+                                
+                                rem_data = None
+                                try:
+                                    rem_data = json.loads(rem_content)
+                                except json.JSONDecodeError:
+                                    # Try to clean markdown if present
+                                    if "```json" in rem_content:
+                                        rem_clean = rem_content.split("```json")[1].split("```")[0].strip()
+                                        try:
+                                            rem_data = json.loads(rem_clean)
+                                        except:
+                                            rem_data = simple_json_repair(rem_content)
+                                    else:
+                                        rem_data = simple_json_repair(rem_content)
+                                
+                                if rem_data:
+                                    output_data["remediation_plan"] = rem_data
+                                    logger.debug(f"Loaded remediation plan from {rem_file}")
+                                    break
+                            except Exception as e:
+                                logger.warning(f"Failed to load remediation plan from {rem_file}: {e}")
 
                     outputs.append(
                         {
@@ -318,10 +304,7 @@ async def load_agent_outputs(
             logger.warning(f"No agent output found in {trial_dir}")
             bad_runs += 1
 
-    logger.info(
-        f"Loaded {len(outputs)} valid trial outputs for incident {incident_id}, "
-        f"found {bad_runs} bad runs"
-    )
+    logger.info(f"Loaded {len(outputs)} valid trial outputs for incident {incident_id}, " f"found {bad_runs} bad runs")
     return outputs, bad_runs
 
 

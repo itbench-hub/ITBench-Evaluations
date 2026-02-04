@@ -35,14 +35,11 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         "root_cause_reasoning_partial",
         "root_cause_proximity_no_fp",
         "root_cause_proximity_with_fp",
+        "remediation_plan",
     ]
 
     # Metrics that should have pass@1 calculated
-    pass_at_1_metrics = [
-        "root_cause_entity",
-        "root_cause_entity_k",
-        "fault_localization_component_identification",
-    ]
+    pass_at_1_metrics = ["root_cause_entity", "root_cause_entity_k", "fault_localization_component_identification"]
 
     # Full list of metric keys including precision/recall/f1 variants
     metric_keys = [
@@ -62,6 +59,7 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         "root_cause_proximity_with_fp_precision",
         "root_cause_proximity_with_fp_recall",
         "root_cause_proximity_with_fp_f1",
+        "remediation_plan",
     ]
 
     for incident_result in all_incidents_results:
@@ -78,19 +76,10 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
                 metric_data = scores.get(metric)
                 if isinstance(metric_data, dict):
                     # Handle different calculation field names
-                    for value_key in [
-                        "calculation",
-                        "calculation_precision",
-                        "calculation_recall",
-                        "calculation_f1",
-                    ]:
+                    for value_key in ["calculation", "calculation_precision", "calculation_recall", "calculation_f1"]:
                         score = metric_data.get(value_key)
                         if score is not None:
-                            if value_key in [
-                                "calculation_precision",
-                                "calculation_recall",
-                                "calculation_f1",
-                            ]:
+                            if value_key in ["calculation_precision", "calculation_recall", "calculation_f1"]:
                                 suffix = value_key.split("_")[1]
                                 incident_scores[f"{metric}_{suffix}"].append(score)
                             else:
@@ -150,11 +139,7 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         if metric_means:
             overall_stats[metric] = {
                 "mean": float(np.mean(metric_means)),
-                "stderr": (
-                    float(scipystats.sem(metric_means))
-                    if len(metric_means) > 1
-                    else None
-                ),
+                "stderr": float(scipystats.sem(metric_means)) if len(metric_means) > 1 else None,
                 "n_incidents": len(metric_means),
             }
             if metric in pass_at_1_metrics and metric_pass_at_1s:

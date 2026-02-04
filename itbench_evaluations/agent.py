@@ -37,6 +37,7 @@ EVAL_CRITERIA = [
     "ROOT_CAUSE_REASONING_PARTIAL",
     "ROOT_CAUSE_PROXIMITY",
     "ROOT_CAUSE_PROXIMITY_FP",
+    "REMEDIATION_PLAN",
 ]
 
 # Default k values for which to compute entity@k metrics
@@ -66,11 +67,7 @@ def compute_entity_metrics_at_k(
 
     precision = tp / len(top_k) if len(top_k) > 0 else 0.0
     recall = tp / gt_count
-    f1 = (
-        (2 * precision * recall) / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
+    f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return {
         "precision": precision,
@@ -121,9 +118,7 @@ class EvaluationConfig:
     """Configuration for evaluation runs."""
 
     eval_criteria: Optional[List[str]] = None
-    k: int = (
-        3  # Legacy parameter, no longer used (k-metrics computed from per-entity matches)
-    )
+    k: int = 3  # Legacy parameter, no longer used (k-metrics computed from per-entity matches)
     max_retries: int = 5
     retry_delay_seconds: int = 70
     api_timeout_seconds: int = 300
@@ -169,9 +164,7 @@ class LAAJAgent:
         bullet_lines_fully_correct = ""
         bullet_lines_partially_correct = ""
 
-        guidance_fully_correct = prompts.INCIDENT_SPECIFIC_FULLY_CORRECT_REASONING.get(
-            str(incident_id)
-        )
+        guidance_fully_correct = prompts.INCIDENT_SPECIFIC_FULLY_CORRECT_REASONING.get(str(incident_id))
         if guidance_fully_correct:
             instruction = prompts.FULLY_CORRECT_REASONING_FEW_SHOT
             if isinstance(guidance_fully_correct, (list, tuple)):
@@ -181,9 +174,7 @@ class LAAJAgent:
             else:
                 bullet_lines_fully_correct = instruction + f"- {guidance_fully_correct}"
 
-        guidance_partially_correct = (
-            prompts.INCIDENT_SPECIFIC_PARTIALLY_CORRECT_REASONING.get(str(incident_id))
-        )
+        guidance_partially_correct = prompts.INCIDENT_SPECIFIC_PARTIALLY_CORRECT_REASONING.get(str(incident_id))
         if guidance_partially_correct:
             instruction = prompts.PARTIALLY_CORRECT_REASONING_FEW_SHOT
             if isinstance(guidance_partially_correct, (list, tuple)):
@@ -191,9 +182,7 @@ class LAAJAgent:
                     f"- {item}" for item in guidance_partially_correct if item
                 )
             else:
-                bullet_lines_partially_correct = (
-                    instruction + f"- {guidance_partially_correct}"
-                )
+                bullet_lines_partially_correct = instruction + f"- {guidance_partially_correct}"
 
         return f"{bullet_lines_fully_correct}\n{bullet_lines_partially_correct}"
 
@@ -217,36 +206,26 @@ class LAAJAgent:
                 # Handle special formatting for certain criteria
                 if criterion == "ROOT_CAUSE_REASONING":
                     entity_correctness_steps = (
-                        prompts.ENTITY_CORRECTNESS_STEPS
-                        if "ROOT_CAUSE_ENTITY" not in selected_criteria
-                        else ""
+                        prompts.ENTITY_CORRECTNESS_STEPS if "ROOT_CAUSE_ENTITY" not in selected_criteria else ""
                     )
                     eval_prompts[criterion] = self._get_eval_prompt(criterion).format(
-                        id=criterion_index,
-                        entity_correctness_steps=entity_correctness_steps,
+                        id=criterion_index, entity_correctness_steps=entity_correctness_steps
                     )
                 elif criterion == "ROOT_CAUSE_REASONING_PARTIAL":
                     if "ROOT_CAUSE_REASONING" not in selected_criteria:
                         if "ROOT_CAUSE_ENTITY" not in selected_criteria:
                             entity_and_reasoning_steps = (
-                                prompts.ENTITY_CORRECTNESS_STEPS
-                                + "\n"
-                                + prompts.REASONING_CORRECTNESS_STEPS
+                                prompts.ENTITY_CORRECTNESS_STEPS + "\n" + prompts.REASONING_CORRECTNESS_STEPS
                             )
                         else:
-                            entity_and_reasoning_steps = (
-                                prompts.REASONING_CORRECTNESS_STEPS
-                            )
+                            entity_and_reasoning_steps = prompts.REASONING_CORRECTNESS_STEPS
                     else:
                         entity_and_reasoning_steps = ""
                     eval_prompts[criterion] = self._get_eval_prompt(criterion).format(
-                        id=criterion_index,
-                        entity_and_reasoning_steps=entity_and_reasoning_steps,
+                        id=criterion_index, entity_and_reasoning_steps=entity_and_reasoning_steps
                     )
                 else:
-                    eval_prompts[criterion] = self._get_eval_prompt(criterion).format(
-                        id=criterion_index
-                    )
+                    eval_prompts[criterion] = self._get_eval_prompt(criterion).format(id=criterion_index)
                 eval_output_formats[criterion] = self._get_eval_output_format(criterion)
                 criterion_index += 1
             else:
@@ -262,32 +241,24 @@ class LAAJAgent:
 
         return prompts.LAAJ_SYSTEM_PROMPT.format(
             semantic_grouping=semantic_grouping,
-            root_cause_entity=eval_prompts["ROOT_CAUSE_ENTITY"],
-            root_cause_entity_k=eval_prompts["ROOT_CAUSE_ENTITY_K"],
-            root_cause_reasoning=eval_prompts["ROOT_CAUSE_REASONING"],
-            propagation_chain=eval_prompts["PROPAGATION_CHAIN"],
-            fault_localization=eval_prompts["FAULT_LOCALIZATION"],
-            root_cause_reasoning_partial=eval_prompts["ROOT_CAUSE_REASONING_PARTIAL"],
-            root_cause_proximity=eval_prompts["ROOT_CAUSE_PROXIMITY"],
-            root_cause_proximity_fp=eval_prompts["ROOT_CAUSE_PROXIMITY_FP"],
-            root_cause_entity_output_format=eval_output_formats["ROOT_CAUSE_ENTITY"],
-            root_cause_entity_k_output_format=eval_output_formats[
-                "ROOT_CAUSE_ENTITY_K"
-            ],
-            root_cause_reasoning_output_format=eval_output_formats[
-                "ROOT_CAUSE_REASONING"
-            ],
-            propagation_chain_output_format=eval_output_formats["PROPAGATION_CHAIN"],
-            fault_localization_output_format=eval_output_formats["FAULT_LOCALIZATION"],
-            root_cause_reasoning_partial_output_format=eval_output_formats[
-                "ROOT_CAUSE_REASONING_PARTIAL"
-            ],
-            root_cause_proximity_output_format=eval_output_formats[
-                "ROOT_CAUSE_PROXIMITY"
-            ],
-            root_cause_proximity_fp_output_format=eval_output_formats[
-                "ROOT_CAUSE_PROXIMITY_FP"
-            ],
+            root_cause_entity=eval_prompts.get("ROOT_CAUSE_ENTITY", ""),
+            root_cause_entity_k=eval_prompts.get("ROOT_CAUSE_ENTITY_K", ""),
+            root_cause_reasoning=eval_prompts.get("ROOT_CAUSE_REASONING", ""),
+            propagation_chain=eval_prompts.get("PROPAGATION_CHAIN", ""),
+            fault_localization=eval_prompts.get("FAULT_LOCALIZATION", ""),
+            root_cause_reasoning_partial=eval_prompts.get("ROOT_CAUSE_REASONING_PARTIAL", ""),
+            root_cause_proximity=eval_prompts.get("ROOT_CAUSE_PROXIMITY", ""),
+            root_cause_proximity_fp=eval_prompts.get("ROOT_CAUSE_PROXIMITY_FP", ""),
+            remediation_plan=eval_prompts.get("REMEDIATION_PLAN", ""),
+            root_cause_entity_output_format=eval_output_formats.get("ROOT_CAUSE_ENTITY", ""),
+            root_cause_entity_k_output_format=eval_output_formats.get("ROOT_CAUSE_ENTITY_K", ""),
+            root_cause_reasoning_output_format=eval_output_formats.get("ROOT_CAUSE_REASONING", ""),
+            propagation_chain_output_format=eval_output_formats.get("PROPAGATION_CHAIN", ""),
+            fault_localization_output_format=eval_output_formats.get("FAULT_LOCALIZATION", ""),
+            root_cause_reasoning_partial_output_format=eval_output_formats.get("ROOT_CAUSE_REASONING_PARTIAL", ""),
+            root_cause_proximity_output_format=eval_output_formats.get("ROOT_CAUSE_PROXIMITY", ""),
+            root_cause_proximity_fp_output_format=eval_output_formats.get("ROOT_CAUSE_PROXIMITY_FP", ""),
+            remediation_plan_output_format=eval_output_formats.get("REMEDIATION_PLAN", ""),
         )
 
     def _build_user_prompt(
@@ -308,9 +279,7 @@ class LAAJAgent:
             incident_specific_guidance=incident_guidance,
         )
 
-    def _process_response(
-        self, content: str, raise_on_calc_error: bool = True
-    ) -> Dict[str, Any]:
+    def _process_response(self, content: str, raise_on_calc_error: bool = True) -> Dict[str, Any]:
         """Process LLM response: parse JSON and evaluate calculator expressions.
 
         Args:
@@ -370,9 +339,7 @@ class LAAJAgent:
         # If there were calculation errors and we should raise, do so
         if calc_errors and raise_on_calc_error:
             error_details = "; ".join(f"'{expr}': {e}" for expr, e in calc_errors)
-            raise CalculationError(
-                f"Failed to evaluate {len(calc_errors)} expression(s): {error_details}"
-            )
+            raise CalculationError(f"Failed to evaluate {len(calc_errors)} expression(s): {error_details}")
 
         return result
 
@@ -405,9 +372,7 @@ class LAAJAgent:
                 # Validate JSON can be parsed
                 clean_content = content
                 if "```json" in clean_content:
-                    clean_content = (
-                        clean_content.split("```json")[1].split("```")[0].strip()
-                    )
+                    clean_content = clean_content.split("```json")[1].split("```")[0].strip()
 
                 # Try to parse, with repair if needed
                 try:
@@ -431,10 +396,7 @@ class LAAJAgent:
                 await asyncio.sleep(30)
 
             except json.JSONDecodeError as e:
-                logger.warning(
-                    f"LLM generated invalid JSON "
-                    f"(attempt {attempt + 1}/{config.max_retries}): {e}"
-                )
+                logger.warning(f"LLM generated invalid JSON " f"(attempt {attempt + 1}/{config.max_retries}): {e}")
                 # Save problematic content to file for debugging
                 if attempt + 1 >= config.max_retries:
                     debug_file = f"/tmp/judge_failed_response_{attempt}.json"
@@ -489,12 +451,8 @@ class LAAJAgent:
         logger.info(f"Starting evaluation for incident {incident_id}, trial {trial_id}")
 
         # Build prompts
-        system_prompt = self._build_system_prompt(
-            selected_criteria, incident_id, config.k
-        )
-        user_prompt = self._build_user_prompt(
-            ground_truth, agent_output, incident_id, selected_criteria
-        )
+        system_prompt = self._build_system_prompt(selected_criteria, incident_id, config.k)
+        user_prompt = self._build_user_prompt(ground_truth, agent_output, incident_id, selected_criteria)
 
         # Retry loop for both LLM call AND response processing (calculator errors)
         max_calc_retries = 3
@@ -508,23 +466,16 @@ class LAAJAgent:
                 # Process response (may raise CalculationError on malformed expressions)
                 # On last attempt, don't raise - just return 0 for bad expressions
                 raise_on_calc_error = calc_attempt < max_calc_retries - 1
-                result = self._process_response(
-                    response, raise_on_calc_error=raise_on_calc_error
-                )
+                result = self._process_response(response, raise_on_calc_error=raise_on_calc_error)
                 result["incident_id"] = incident_id
                 result["trial_id"] = trial_id
 
                 # Compute k-metrics from per-entity matches if ROOT_CAUSE_ENTITY was evaluated
                 scores = result.get("scores", {})
                 root_cause_entity = scores.get("root_cause_entity", {})
-                if (
-                    isinstance(root_cause_entity, dict)
-                    and "predicted_entities" in root_cause_entity
-                ):
+                if isinstance(root_cause_entity, dict) and "predicted_entities" in root_cause_entity:
                     # Compute metrics for all k values
-                    k_metrics = compute_all_k_metrics(
-                        root_cause_entity, DEFAULT_K_VALUES
-                    )
+                    k_metrics = compute_all_k_metrics(root_cause_entity, DEFAULT_K_VALUES)
 
                     # Add k-metrics to scores in backward-compatible format
                     # Legacy format: root_cause_entity_k (uses k=3 by default for backward compat)
@@ -544,13 +495,9 @@ class LAAJAgent:
                         }
 
                     result["scores"] = scores
-                    logger.info(
-                        f"Computed entity@k metrics for k={list(k_metrics.keys())}"
-                    )
+                    logger.info(f"Computed entity@k metrics for k={list(k_metrics.keys())}")
 
-                logger.info(
-                    f"Successfully evaluated incident {incident_id}, trial {trial_id}"
-                )
+                logger.info(f"Successfully evaluated incident {incident_id}, trial {trial_id}")
                 return result
 
             except CalculationError as e:
@@ -563,9 +510,7 @@ class LAAJAgent:
                 continue
 
             except Exception as e:
-                logger.error(
-                    f"Error evaluating incident {incident_id}: {e}", exc_info=True
-                )
+                logger.error(f"Error evaluating incident {incident_id}: {e}", exc_info=True)
                 return {
                     "incident_id": incident_id,
                     "trial_id": trial_id,
@@ -601,9 +546,7 @@ async def evaluate_single(
         Evaluation result with scores
     """
     agent = LAAJAgent()
-    return await agent.evaluate_single(
-        ground_truth, agent_output, incident_id, **kwargs
-    )
+    return await agent.evaluate_single(ground_truth, agent_output, incident_id, **kwargs)
 
 
 async def evaluate_batch(
@@ -662,18 +605,14 @@ async def evaluate_batch(
             )
 
     # Run all evaluations concurrently (limited by semaphore)
-    results = await asyncio.gather(
-        *[evaluate_with_semaphore(task) for task in tasks_info], return_exceptions=True
-    )
+    results = await asyncio.gather(*[evaluate_with_semaphore(task) for task in tasks_info], return_exceptions=True)
 
     # Process results, converting exceptions to error dicts
     processed_results = []
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             task = tasks_info[i]
-            logger.error(
-                f"Evaluation failed for {task['incident_id']}/{task['trial_id']}: {result}"
-            )
+            logger.error(f"Evaluation failed for {task['incident_id']}/{task['trial_id']}: {result}")
             processed_results.append(
                 {
                     "incident_id": task["incident_id"],
