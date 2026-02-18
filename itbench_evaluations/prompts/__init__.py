@@ -9,6 +9,9 @@ from .few_shot import (FULLY_CORRECT_REASONING_FEW_SHOT,
                        INCIDENT_SPECIFIC_FULLY_CORRECT_REASONING,
                        INCIDENT_SPECIFIC_PARTIALLY_CORRECT_REASONING,
                        PARTIALLY_CORRECT_REASONING_FEW_SHOT)
+from .finops_main import (FINOPS_EVALUATE_PROMPT_TEMPLATE,
+                          FINOPS_LAAJ_SYSTEM_PROMPT,
+                          FINOPS_PARSE_PROMPT_TEMPLATE)
 from .main import EVALUATE_PROMPT_TEMPLATE, LAAJ_SYSTEM_PROMPT
 from .propagation_chain import (PROPAGATION_CHAIN_OUTPUT_FORMAT,
                                 PROPAGATION_CHAIN_PROMPT)
@@ -59,4 +62,8 @@ __all__ = [
     # Main prompts
     "EVALUATE_PROMPT_TEMPLATE",
     "LAAJ_SYSTEM_PROMPT",
+    # FinOps prompts
+    "FINOPS_LAAJ_SYSTEM_PROMPT",
+    "FINOPS_EVALUATE_PROMPT_TEMPLATE",
+    "FINOPS_PARSE_PROMPT_TEMPLATE",
 ]

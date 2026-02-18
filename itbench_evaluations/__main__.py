@@ -7,7 +7,8 @@ import logging
 import sys
 from pathlib import Path
 
-from .agent import EVAL_CRITERIA, EvaluationConfig, evaluate_batch
+from .agent import (EVAL_CRITERIA, FINOPS_EVAL_CRITERIA, SUPPORTED_DOMAINS,
+                    EvaluationConfig, evaluate_batch)
 from .aggregator import calculate_statistics
 from .loader import load_agent_outputs, load_ground_truth
 
@@ -49,6 +50,15 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--domain",
+        "-d",
+        type=str,
+        choices=SUPPORTED_DOMAINS,
+        default="sre",
+        help="Evaluation domain: 'sre' for incident RCA, 'finops' for cost anomaly RCA (default: sre)",
+    )
+
+    parser.add_argument(
         "--result-file",
         "-r",
         type=str,
@@ -61,8 +71,8 @@ def parse_args():
         "-e",
         type=str,
         nargs="+",
-        choices=EVAL_CRITERIA,
-        help="Evaluation criteria to use (default: all)",
+        choices=EVAL_CRITERIA + FINOPS_EVAL_CRITERIA,
+        help="Evaluation criteria to use (default: all for selected domain)",
     )
 
     parser.add_argument(
@@ -122,6 +132,7 @@ async def main_async(args):
         eval_criteria=args.eval_criteria,
         k=args.k,
         max_concurrent=args.max_concurrent,
+        domain=args.domain,
     )
 
     # Run batch evaluation
@@ -159,9 +170,10 @@ async def main_async(args):
         "raw_results": results,
         "statistics": stats,
         "config": {
+            "domain": args.domain,
             "ground_truth_path": args.ground_truth,
             "outputs_path": args.outputs,
-            "eval_criteria": args.eval_criteria or EVAL_CRITERIA,
+            "eval_criteria": args.eval_criteria or (FINOPS_EVAL_CRITERIA if args.domain == "finops" else EVAL_CRITERIA),
             "k": args.k,
         },
     }
