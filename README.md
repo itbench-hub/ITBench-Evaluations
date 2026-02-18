@@ -1,6 +1,6 @@
 # ITBench Evaluations
 
-Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysis (RCA) agent outputs. The CLI loads ground-truth scenarios, reads agent trial outputs, repairs malformed JSON when possible, scores multiple metrics with a judge model, and aggregates macro statistics.
+Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysis (RCA) agent outputs. Supports both **SRE** (incident RCA) and **FinOps** (cost anomaly RCA) evaluation domains. The CLI loads ground-truth scenarios, reads agent trial outputs, repairs malformed JSON when possible, scores multiple metrics with a judge model, and aggregates macro statistics.
 
 ---
 
@@ -15,7 +15,9 @@ Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysi
 | `itbench_evaluations/aggregator.py` | Computes per-incident and overall statistics. |
 | `itbench_evaluations/json_fixer.py` | JSON repair utilities for malformed model outputs. |
 | `itbench_evaluations/namespace_filter.py` | Optional post-processing helpers for filtering and recalculating metrics. |
-| `itbench_evaluations/prompts/` | System prompts and per-metric templates. |
+| `itbench_evaluations/prompts/main.py` | SRE system prompt and evaluation template. |
+| `itbench_evaluations/prompts/finops_main.py` | FinOps system prompt, evaluation template, and parse template. |
+| `itbench_evaluations/prompts/` | Per-metric criterion templates (entity, reasoning, proximity, etc.). |
 | `itbench_evaluations/data/` | Example incident output hierarchy. |
 | `.env.tmpl` | Environment configuration template (copy to `.env`). |
 | `pyproject.toml` | Python package configuration and dependencies. |
@@ -89,6 +91,8 @@ Toolkit for running **LLM-as-a-Judge** evaluations on ITBench root-cause analysi
 
 ## Running evaluations
 
+### SRE evaluation (default)
+
 ```bash
 uv run itbench-evaluations \
   --ground-truth path/to/ground_truths.json \
@@ -96,11 +100,26 @@ uv run itbench-evaluations \
   --eval-criteria ROOT_CAUSE_ENTITY ROOT_CAUSE_REASONING
 ```
 
-Key options:
+### FinOps evaluation
+
+```bash
+uv run itbench-evaluations \
+  --domain finops \
+  --ground-truth path/to/finops_ground_truths.json \
+  --outputs path/to/finops-agent-outputs
+```
+
+FinOps evaluates cost anomaly RCA by comparing predicted resources against ground-truth resources using `name` and `type` matching. It produces a single binary metric (`root_cause_resource`: 0 or 1). If agent output is raw text rather than structured JSON, an LLM-based preprocessing step extracts resource information automatically.
+
+### Key options
+
+- `--domain` selects the evaluation domain: `sre` (default) or `finops`.
 - `--result-file` sets the output file (default: `evaluation_results.json`).
-- `--eval-criteria` accepts: `ROOT_CAUSE_ENTITY`, `ROOT_CAUSE_REASONING`, `PROPAGATION_CHAIN`,
-  `FAULT_LOCALIZATION`, `ROOT_CAUSE_REASONING_PARTIAL`, `ROOT_CAUSE_PROXIMITY`,
-  `ROOT_CAUSE_PROXIMITY_FP`.
+- `--eval-criteria` accepts any of the following:
+  - **SRE:** `ROOT_CAUSE_ENTITY`, `ROOT_CAUSE_REASONING`, `PROPAGATION_CHAIN`,
+    `FAULT_LOCALIZATION`, `ROOT_CAUSE_REASONING_PARTIAL`, `ROOT_CAUSE_PROXIMITY`,
+    `ROOT_CAUSE_PROXIMITY_FP`.
+  - **FinOps:** `ROOT_CAUSE_RESOURCE`.
 - `--k` is kept for backward compatibility (entity@k metrics are derived from `ROOT_CAUSE_ENTITY`).
 - `--max-concurrent` controls evaluation concurrency (default: 5).
 - `--verbose` enables debug logging.
@@ -120,6 +139,7 @@ The CLI writes a JSON report containing raw results and aggregated statistics:
     "overall": { "...": "..." }
   },
   "config": {
+    "domain": "sre",
     "ground_truth_path": "...",
     "outputs_path": "...",
     "eval_criteria": ["..."],
@@ -132,11 +152,17 @@ The CLI writes a JSON report containing raw results and aggregated statistics:
 
 `aggregator.py` computes macro-level mean, stderr, and pass@1 (for categorical metrics) for the following:
 
+### SRE metrics
+
 - `root_cause_entity` (precision/recall/F1 + pass@1): Whether the correct root cause entity was identified
 - `root_cause_entity_k` (precision/recall/F1 + pass@1, configurable `k`): Whether the correct root cause entity was identified in the first k=(1,..,5) model predictions
 - `root_cause_reasoning`: Whether the reasoning for the root cause was correct (0, 0.5 or 1).
 - `propagation_chain`: Scores the full propagation chain
 - `fault_localization_component_identification`: Checks if the model correctly identified the first semantic component to exhibit a significant failure symptom
 - `root_cause_reasoning_partial`: Awards partial credit for reasoning if the model correctly analyzed a downstream symptom when it missed the root cause entity.
-- `root_cause_proximity` (precision/recall/F1): Compute closeness between model root cause entities and the Ground-Truth (GT) root-cause entities based on distance (number of hops) between the model entity’s component and any GT root-cause component
+- `root_cause_proximity` (precision/recall/F1): Compute closeness between model root cause entities and the Ground-Truth (GT) root-cause entities based on distance (number of hops) between the model entity's component and any GT root-cause component
 - `root_cause_proximity_with_fp` (precision/recall/F1): Similar to root_cause_proximity_no_fp but distance is relative to the GT path length
+
+### FinOps metrics
+
+- `root_cause_resource` (binary 0/1 + pass@1): Whether all cost anomaly root cause resources were correctly identified by matching `name` and `type` against the ground truth resource list

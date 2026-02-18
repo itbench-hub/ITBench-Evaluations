@@ -25,7 +25,7 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
     total_bad_runs = 0
     all_trials_scores = []
 
-    # Define metric names
+    # Define metric names (SRE + FinOps)
     metric_names = [
         "root_cause_entity",
         "root_cause_entity_k",
@@ -35,6 +35,8 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         "root_cause_reasoning_partial",
         "root_cause_proximity_no_fp",
         "root_cause_proximity_with_fp",
+        # FinOps metrics
+        "root_cause_resource",
     ]
 
     # Metrics that should have pass@1 calculated
@@ -42,6 +44,8 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         "root_cause_entity",
         "root_cause_entity_k",
         "fault_localization_component_identification",
+        # FinOps: pass@1 on binary 0/1 score
+        "root_cause_resource",
     ]
 
     # Full list of metric keys including precision/recall/f1 variants
@@ -62,6 +66,8 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         "root_cause_proximity_with_fp_precision",
         "root_cause_proximity_with_fp_recall",
         "root_cause_proximity_with_fp_f1",
+        # FinOps metrics (direct score, no precision/recall/f1 breakdown)
+        "root_cause_resource",
     ]
 
     for incident_result in all_incidents_results:
