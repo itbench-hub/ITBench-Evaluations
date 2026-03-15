@@ -39,6 +39,14 @@ EVAL_CRITERIA = [
     "ROOT_CAUSE_PROXIMITY_FP",
 ]
 
+# Supported evaluation domains
+SUPPORTED_DOMAINS = ["sre", "finops"]
+
+# FinOps uses a single criterion with binary scoring
+FINOPS_EVAL_CRITERIA = [
+    "ROOT_CAUSE_RESOURCE",
+]
+
 # Default k values for which to compute entity@k metrics
 DEFAULT_K_VALUES = [1, 2, 3, 4, 5]
 
@@ -128,6 +136,7 @@ class EvaluationConfig:
     retry_delay_seconds: int = 70
     api_timeout_seconds: int = 300
     max_concurrent: int = 5  # Max concurrent evaluations in batch mode
+    domain: str = "sre"  # Evaluation domain: "sre" or "finops"
 
 
 class LAAJAgent:
@@ -138,18 +147,20 @@ class LAAJAgent:
     and uses calculator tool placeholders for mathematical calculations.
     """
 
-    def __init__(self, model: Optional[str] = None):
+    def __init__(self, model: Optional[str] = None, domain: str = "sre"):
         """Initialize the LAAJ agent.
 
         Args:
             model: Optional model name override. If not provided,
                    uses JUDGE_MODEL environment variable.
+            domain: Evaluation domain ("sre" or "finops").
         """
         self.client = create_judge_client()
         self.model = model or get_judge_model()
         self.aeval = Interpreter()
+        self.domain = domain
 
-        logger.info(f"LAAJ Agent initialized with model: {self.model}")
+        logger.info(f"LAAJ Agent initialized with model: {self.model}, domain: {self.domain}")
 
     def _get_eval_prompt(self, criterion: str) -> str:
         """Get the evaluation prompt for a criterion."""
@@ -197,6 +208,44 @@ class LAAJAgent:
 
         return f"{bullet_lines_fully_correct}\n{bullet_lines_partially_correct}"
 
+    def _finops_parse_agent_output(self, agent_output_string: str) -> Optional[Dict[str, Any]]:
+        """Parse JSON from agent output, handling markdown code blocks."""
+        try:
+            text = agent_output_string
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
+            return json.loads(text)
+        except (json.JSONDecodeError, IndexError) as e:
+            logger.warning(f"Failed to parse agent output: {e}")
+            return None
+
+    async def _finops_preprocess_parse(self, text: str) -> Optional[Dict[str, Any]]:
+        """Use the judge LLM to extract structured resource JSON from raw text.
+
+        This handles cases where the agent output is unstructured text rather
+        than clean JSON.
+        """
+        parse_prompt = prompts.FINOPS_PARSE_PROMPT_TEMPLATE.format(text=text)
+        try:
+            response = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[{"role": "user", "content": parse_prompt}],
+                        temperature=0,
+                    ),
+                ),
+                timeout=120,
+            )
+            content = response.choices[0].message.content.strip()
+            return self._finops_parse_agent_output(content)
+        except Exception as e:
+            logger.error(f"FinOps preprocess parse failed: {e}")
+            return None
+
     def _build_system_prompt(
         self,
         selected_criteria: List[str],
@@ -204,6 +253,10 @@ class LAAJAgent:
         k: int = 3,
     ) -> str:
         """Build the system prompt from selected evaluation criteria."""
+        # FinOps uses its own self-contained system prompt
+        if self.domain == "finops":
+            return prompts.FINOPS_LAAJ_SYSTEM_PROMPT
+
         eval_prompts = {}
         eval_output_formats = {}
         criterion_index = 1
@@ -298,6 +351,13 @@ class LAAJAgent:
         selected_criteria: Optional[List[str]] = None,
     ) -> str:
         """Build the user prompt with GT and agent output."""
+        if self.domain == "finops":
+            gt_for_eval = {"resources": ground_truth.get("resource", [])}
+            return prompts.FINOPS_EVALUATE_PROMPT_TEMPLATE.format(
+                ground_truth=json.dumps(gt_for_eval, indent=2),
+                generated_response=json.dumps(agent_output, indent=2),
+            )
+
         incident_guidance = ""
         if selected_criteria and "ROOT_CAUSE_REASONING" in selected_criteria:
             incident_guidance = self._build_incident_guidance(incident_id)
@@ -484,9 +544,33 @@ class LAAJAgent:
             Evaluation result with scores for each metric
         """
         config = config or EvaluationConfig()
-        selected_criteria = config.eval_criteria or EVAL_CRITERIA
 
-        logger.info(f"Starting evaluation for incident {incident_id}, trial {trial_id}")
+        # Select criteria based on domain
+        if self.domain == "finops":
+            selected_criteria = config.eval_criteria or FINOPS_EVAL_CRITERIA
+        else:
+            selected_criteria = config.eval_criteria or EVAL_CRITERIA
+
+        logger.info(
+            f"Starting evaluation for incident {incident_id}, trial {trial_id} "
+            f"(domain={self.domain})"
+        )
+
+        # FinOps: preprocess agent output if it's a raw string
+        if self.domain == "finops" and isinstance(agent_output, str):
+            parsed = self._finops_parse_agent_output(agent_output)
+            if parsed is None:
+                # Fall back to LLM-based extraction
+                logger.info("Direct JSON parse failed, using LLM preprocess for FinOps agent output")
+                parsed = await self._finops_preprocess_parse(agent_output)
+            if parsed is None:
+                return {
+                    "incident_id": incident_id,
+                    "trial_id": trial_id,
+                    "error": "Failed to parse agent output JSON for FinOps evaluation",
+                    "scores": {"root_cause_resource": {"calculation": 0, "justification": "Failed to parse agent output JSON"}},
+                }
+            agent_output = parsed
 
         # Build prompts
         system_prompt = self._build_system_prompt(
@@ -514,39 +598,40 @@ class LAAJAgent:
                 result["incident_id"] = incident_id
                 result["trial_id"] = trial_id
 
-                # Compute k-metrics from per-entity matches if ROOT_CAUSE_ENTITY was evaluated
-                scores = result.get("scores", {})
-                root_cause_entity = scores.get("root_cause_entity", {})
-                if (
-                    isinstance(root_cause_entity, dict)
-                    and "predicted_entities" in root_cause_entity
-                ):
-                    # Compute metrics for all k values
-                    k_metrics = compute_all_k_metrics(
-                        root_cause_entity, DEFAULT_K_VALUES
-                    )
+                # SRE-specific: compute k-metrics from per-entity matches
+                if self.domain == "sre":
+                    scores = result.get("scores", {})
+                    root_cause_entity = scores.get("root_cause_entity", {})
+                    if (
+                        isinstance(root_cause_entity, dict)
+                        and "predicted_entities" in root_cause_entity
+                    ):
+                        # Compute metrics for all k values
+                        k_metrics = compute_all_k_metrics(
+                            root_cause_entity, DEFAULT_K_VALUES
+                        )
 
-                    # Add k-metrics to scores in backward-compatible format
-                    # Legacy format: root_cause_entity_k (uses k=3 by default for backward compat)
-                    if 3 in k_metrics:
-                        scores["root_cause_entity_k"] = {
-                            "calculation_precision": k_metrics[3]["precision"],
-                            "calculation_recall": k_metrics[3]["recall"],
-                            "calculation_f1": k_metrics[3]["f1"],
-                        }
+                        # Add k-metrics to scores in backward-compatible format
+                        # Legacy format: root_cause_entity_k (uses k=3 by default for backward compat)
+                        if 3 in k_metrics:
+                            scores["root_cause_entity_k"] = {
+                                "calculation_precision": k_metrics[3]["precision"],
+                                "calculation_recall": k_metrics[3]["recall"],
+                                "calculation_f1": k_metrics[3]["f1"],
+                            }
 
-                    # New format: root_cause_entity_k@{k} for each k value
-                    for k, metrics in k_metrics.items():
-                        scores[f"root_cause_entity_k@{k}"] = {
-                            "calculation_precision": metrics["precision"],
-                            "calculation_recall": metrics["recall"],
-                            "calculation_f1": metrics["f1"],
-                        }
+                        # New format: root_cause_entity_k@{k} for each k value
+                        for k, metrics in k_metrics.items():
+                            scores[f"root_cause_entity_k@{k}"] = {
+                                "calculation_precision": metrics["precision"],
+                                "calculation_recall": metrics["recall"],
+                                "calculation_f1": metrics["f1"],
+                            }
 
-                    result["scores"] = scores
-                    logger.info(
-                        f"Computed entity@k metrics for k={list(k_metrics.keys())}"
-                    )
+                        result["scores"] = scores
+                        logger.info(
+                            f"Computed entity@k metrics for k={list(k_metrics.keys())}"
+                        )
 
                 logger.info(
                     f"Successfully evaluated incident {incident_id}, trial {trial_id}"
@@ -587,6 +672,7 @@ async def evaluate_single(
     ground_truth: Dict[str, Any],
     agent_output: Dict[str, Any],
     incident_id: str,
+    domain: str = "sre",
     **kwargs,
 ) -> Dict[str, Any]:
     """Convenience function for single evaluation.
@@ -595,12 +681,13 @@ async def evaluate_single(
         ground_truth: Ground truth data for the incident
         agent_output: Agent's output to evaluate
         incident_id: Incident identifier
+        domain: Evaluation domain ("sre" or "finops")
         **kwargs: Additional arguments passed to LAAJAgent.evaluate_single
 
     Returns:
         Evaluation result with scores
     """
-    agent = LAAJAgent()
+    agent = LAAJAgent(domain=domain)
     return await agent.evaluate_single(
         ground_truth, agent_output, incident_id, **kwargs
     )
@@ -624,8 +711,8 @@ async def evaluate_batch(
     Returns:
         List of evaluation results for all trials
     """
-    agent = LAAJAgent()
     config = config or EvaluationConfig()
+    agent = LAAJAgent(domain=config.domain)
 
     # Build list of all evaluation tasks
     tasks_info = []
