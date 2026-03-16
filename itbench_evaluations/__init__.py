@@ -1,10 +1,11 @@
-"""ITBench Evaluations - LLM-as-a-Judge for RCA evaluation."""
+"""ITBench Evaluations - LLM-as-a-Judge for RCA evaluation and OPA-based CISO evaluation."""
 
 from .agent import (DEFAULT_K_VALUES, EVAL_CRITERIA, FINOPS_EVAL_CRITERIA,
                     SUPPORTED_DOMAINS, EvaluationConfig, LAAJAgent,
                     compute_all_k_metrics, compute_entity_metrics_at_k,
                     evaluate_batch, evaluate_single)
 from .aggregator import calculate_statistics
+from .ciso import CISO_EVAL_CRITERIA, CISOEvaluator
 from .client import create_judge_client, get_judge_model
 from .loader import (canonicalize_scenario_id, load_agent_outputs,
                      load_ground_truth)
@@ -16,6 +17,7 @@ __all__ = [
     "EvaluationConfig",
     "EVAL_CRITERIA",
     "FINOPS_EVAL_CRITERIA",
+    "CISO_EVAL_CRITERIA",
     "SUPPORTED_DOMAINS",
     "DEFAULT_K_VALUES",
     "compute_entity_metrics_at_k",
@@ -26,4 +28,5 @@ __all__ = [
     "canonicalize_scenario_id",
     "create_judge_client",
     "get_judge_model",
+    "CISOEvaluator",
 ]

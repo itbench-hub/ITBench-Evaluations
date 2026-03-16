@@ -40,12 +40,15 @@ EVAL_CRITERIA = [
 ]
 
 # Supported evaluation domains
-SUPPORTED_DOMAINS = ["sre", "finops"]
+SUPPORTED_DOMAINS = ["sre", "finops", "ciso"]
 
 # FinOps uses a single criterion with binary scoring
 FINOPS_EVAL_CRITERIA = [
     "ROOT_CAUSE_RESOURCE",
 ]
+
+# CISO uses OPA-based deterministic evaluation (not LLM-based)
+# Criteria defined in ciso.py module
 
 # Default k values for which to compute entity@k metrics
 DEFAULT_K_VALUES = [1, 2, 3, 4, 5]
@@ -136,7 +139,7 @@ class EvaluationConfig:
     retry_delay_seconds: int = 70
     api_timeout_seconds: int = 300
     max_concurrent: int = 5  # Max concurrent evaluations in batch mode
-    domain: str = "sre"  # Evaluation domain: "sre" or "finops"
+    domain: str = "sre"  # Evaluation domain: "sre", "finops", or "ciso"
 
 
 class LAAJAgent:
@@ -153,7 +156,7 @@ class LAAJAgent:
         Args:
             model: Optional model name override. If not provided,
                    uses JUDGE_MODEL environment variable.
-            domain: Evaluation domain ("sre" or "finops").
+            domain: Evaluation domain ("sre", "finops", or "ciso").
         """
         self.client = create_judge_client()
         self.model = model or get_judge_model()
@@ -697,22 +700,34 @@ async def evaluate_batch(
     ground_truths: Dict[str, Dict[str, Any]],
     agent_outputs: Dict[str, List[Dict[str, Any]]],
     config: Optional[EvaluationConfig] = None,
+    scenario_dir: Optional[Path] = None,
 ) -> List[Dict[str, Any]]:
     """Evaluate multiple incidents in batch with concurrent execution.
 
     Args:
         ground_truths: Dict mapping incident_id -> ground truth dict
+                       For CISO domain, can be empty dict (OPA is the ground truth)
         agent_outputs: Dict mapping incident_id -> list of trial outputs
                        Each trial output should have:
                        - "trial": trial number (int)
                        - "output": agent output dict
+                       For CISO: "output" should be path to agent workdir
         config: Evaluation configuration (includes max_concurrent setting)
+        scenario_dir: Path to scenario directory (required for CISO domain)
 
     Returns:
         List of evaluation results for all trials
     """
     config = config or EvaluationConfig()
-    agent = LAAJAgent(domain=config.domain)
+
+    # CISO uses OPA-based evaluator, SRE/FinOps use LLM-based evaluator
+    if config.domain == "ciso":
+        from .ciso import CISOEvaluator
+        if not scenario_dir:
+            raise ValueError("scenario_dir is required for CISO domain")
+        evaluator = CISOEvaluator()
+    else:
+        evaluator = LAAJAgent(domain=config.domain)
 
     # Build list of all evaluation tasks
     tasks_info = []
@@ -740,13 +755,23 @@ async def evaluate_batch(
 
     async def evaluate_with_semaphore(task_info: Dict) -> Dict[str, Any]:
         async with semaphore:
-            return await agent.evaluate_single(
-                task_info["gt"],
-                task_info["output"],
-                task_info["incident_id"],
-                trial_id=task_info["trial_id"],
-                config=config,
-            )
+            # CISO evaluator has different signature
+            if config.domain == "ciso":
+                return await evaluator.evaluate_single(
+                    scenario_dir,
+                    task_info["output"],  # For CISO, this is the agent workdir path
+                    task_info["incident_id"],
+                    task_info["trial_id"],
+                )
+            else:
+                # SRE/FinOps use LLM evaluator
+                return await evaluator.evaluate_single(
+                    task_info["gt"],
+                    task_info["output"],
+                    task_info["incident_id"],
+                    trial_id=task_info["trial_id"],
+                    config=config,
+                )
 
     # Run all evaluations concurrently (limited by semaphore)
     results = await asyncio.gather(

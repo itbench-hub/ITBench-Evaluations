@@ -111,15 +111,35 @@ uv run itbench-evaluations \
 
 FinOps evaluates cost anomaly RCA by comparing predicted resources against ground-truth resources using `name` and `type` matching. It produces a single binary metric (`root_cause_resource`: 0 or 1). If agent output is raw text rather than structured JSON, an LLM-based preprocessing step extracts resource information automatically.
 
+### CISO evaluation
+
+```bash
+uv run itbench-evaluations \
+  --domain ciso \
+  --scenario-dir path/to/ITBench-Lite/snapshots/ciso/v0.1/k8s-opa-static-cis-5.1.1 \
+  --outputs path/to/ciso-agent-outputs \
+  --ground-truth dummy  # Not used for CISO
+```
+
+CISO evaluates Kubernetes compliance checking solutions using deterministic OPA (Open Policy Agent) evaluation instead of LLM-as-a-Judge. It produces 4 binary metrics:
+- `required_files_exist`: Checks if `fetch.sh` and `policy.rego` exist
+- `fetch_generates_data`: Verifies `fetch.sh` creates valid `collected_data.json`
+- `violation_detection`: OPA policy correctly detects violations (returns `false`)
+- `compliance_validation`: OPA policy confirms compliance with compliant resources (returns `true`)
+
+**Note:** CISO does not use ground truth files - OPA evaluation is deterministic. The `--scenario-dir` must point to a scenario containing `static-resources-compliant/` directory.
+
 ### Key options
 
-- `--domain` selects the evaluation domain: `sre` (default) or `finops`.
+- `--domain` selects the evaluation domain: `sre` (default), `finops`, or `ciso`.
 - `--result-file` sets the output file (default: `evaluation_results.json`).
 - `--eval-criteria` accepts any of the following:
   - **SRE:** `ROOT_CAUSE_ENTITY`, `ROOT_CAUSE_REASONING`, `PROPAGATION_CHAIN`,
     `FAULT_LOCALIZATION`, `ROOT_CAUSE_REASONING_PARTIAL`, `ROOT_CAUSE_PROXIMITY`,
     `ROOT_CAUSE_PROXIMITY_FP`.
   - **FinOps:** `ROOT_CAUSE_RESOURCE`.
+  - **CISO:** `required_files_exist`, `fetch_generates_data`, `violation_detection`, `compliance_validation`.
+- `--scenario-dir` (required for CISO) specifies the scenario directory containing compliant resources.
 - `--k` is kept for backward compatibility (entity@k metrics are derived from `ROOT_CAUSE_ENTITY`).
 - `--max-concurrent` controls evaluation concurrency (default: 5).
 - `--verbose` enables debug logging.
