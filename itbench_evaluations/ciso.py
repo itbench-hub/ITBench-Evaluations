@@ -168,6 +168,14 @@ class CISOEvaluator:
         details: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Create result dict matching SRE/FinOps format."""
+        for criteria in CISO_EVAL_CRITERIA:
+            if criteria not in scores:
+                scores[criteria] = {
+                    "calculation": 0,
+                    "justification": "Not attempted because the prerequisite was not met.",
+                    "details": {},
+                }
+
         return {
             "incident_id": scenario_id,  # Match SRE/FinOps naming
             "trial_id": trial_id,

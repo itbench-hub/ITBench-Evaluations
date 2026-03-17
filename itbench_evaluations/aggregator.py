@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 from scipy import stats as scipystats
-
+from .ciso import CISO_EVAL_CRITERIA
 
 def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Calculate pass@1, mean, and standard error for each metric.
@@ -38,6 +38,8 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         # FinOps metrics
         "root_cause_resource",
     ]
+    # CISO metrics
+    metric_names += CISO_EVAL_CRITERIA
 
     # Metrics that should have pass@1 calculated
     pass_at_1_metrics = [
@@ -69,6 +71,8 @@ def calculate_statistics(all_incidents_results: List[Dict[str, Any]]) -> Dict[st
         # FinOps metrics (direct score, no precision/recall/f1 breakdown)
         "root_cause_resource",
     ]
+    # CISO metrics
+    metric_keys += CISO_EVAL_CRITERIA
 
     for incident_result in all_incidents_results:
         incident_id = incident_result["incident_id"]
