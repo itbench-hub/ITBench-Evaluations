@@ -137,8 +137,9 @@ async def main_async(args):
         # For CISO, load outputs differently (workdir paths instead of JSON files)
         outputs_dir = Path(args.outputs)
         for scenario_path in outputs_dir.iterdir():
-            if not scenario_path.is_dir():
+            if not scenario_path.is_dir() or scenario_path.name == ".git":
                 continue
+
             scenario_id = scenario_path.name
             ground_truths[scenario_id] = {}  # Empty GT for CISO
 
