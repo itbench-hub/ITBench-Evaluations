@@ -58,6 +58,13 @@ class CISOEvaluator:
         scenario_dir = Path(scenario_dir)
         agent_workdir = Path(agent_workdir)
 
+        # TODO: Workaround to align the framework
+        # Copy static-resources to agent_workdir
+        static_resources = scenario_dir / "static-resources"
+        if (agent_workdir / "static-resources").exists():
+            shutil.rmtree(agent_workdir / "static-resources")
+        shutil.copytree(static_resources, agent_workdir / "static-resources")
+
         # Verify compliant resources exist
         compliant_resources = scenario_dir / "static-resources-compliant"
         if not compliant_resources.exists():
@@ -85,10 +92,20 @@ class CISOEvaluator:
             # Create temporary working directory
             temp_dir = tempfile.mkdtemp(prefix="ciso_eval_")
             work_path = Path(temp_dir) / "workdir"
-            shutil.copytree(agent_workdir, work_path)
-
+            shutil.copytree(agent_workdir, work_path, ignore=shutil.ignore_patterns(".git"))
             details["temp_dir"] = temp_dir
             details["work_path"] = str(work_path)
+
+            # TODO: Workaround to align the frameworl
+            # Evaluation isolates each run by copying the full snapshot (agent-workdir + static-resources +
+            # static-resources-compliant) into a fresh working directory. Ideally AUB (Agent under Bench) would run inside that
+            # complete workdir so fetch.sh needs no fixup. Currently AUB runs against snapshot paths directly,
+            # so fetch.sh embeds the snapshot path — replaced here at evaluation time.
+            fetch_script = work_path / "fetch.sh"
+            content = fetch_script.read_text()
+            content = content.replace(str(static_resources), "static-resources")
+            content = content.replace(str(agent_workdir), ".")
+            fetch_script.write_text(content)
 
             # Criterion 2: Execute fetch.sh and check for collected_data.json
             fetch_success, fetch_details = self._run_fetch_script(work_path)
