@@ -758,7 +758,7 @@ async def evaluate_batch(
             # CISO evaluator has different signature
             if config.domain == "ciso":
                 return await evaluator.evaluate_single(
-                    scenario_dir,
+                    scenario_dir / task_info["incident_id"],
                     task_info["output"],  # For CISO, this is the agent workdir path
                     task_info["incident_id"],
                     task_info["trial_id"],
