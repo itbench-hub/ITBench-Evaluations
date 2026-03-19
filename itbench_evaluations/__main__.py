@@ -80,7 +80,7 @@ def parse_args():
         "--scenario-dir",
         "-s",
         type=str,
-        help="Path to scenario directory (required for CISO domain, contains static-resources-compliant/)",
+        help="Path to the scenario snapshot directory (e.g. snapshots/ciso/v0.1) (required for the CISO domain)",
     )
 
     parser.add_argument(
