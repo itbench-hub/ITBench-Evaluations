@@ -63,7 +63,6 @@ class CISOEvaluator:
         static_resources = scenario_dir / "static-resources"
         if (agent_workdir / "static-resources").exists():
             shutil.rmtree(agent_workdir / "static-resources")
-        shutil.copytree(static_resources, agent_workdir / "static-resources")
 
         # Verify compliant resources exist
         compliant_resources = scenario_dir / "static-resources-compliant"
@@ -89,82 +88,142 @@ class CISOEvaluator:
             if not files_exist:
                 return self._create_result(scenario_id, trial_id, scores, details)
 
-            # Create temporary working directory
             temp_dir = tempfile.mkdtemp(prefix="ciso_eval_")
-            work_path = Path(temp_dir) / "workdir"
-            shutil.copytree(agent_workdir, work_path, ignore=shutil.ignore_patterns(".git"))
-            details["temp_dir"] = temp_dir
-            details["work_path"] = str(work_path)
+            def fetch_and_check(static_resources_dir: Path):
+                # Create temporary working directory
+                each_scores = {}
+                each_details = {}
+                work_path = Path(temp_dir) / static_resources_dir.name
+                shutil.copytree(agent_workdir, work_path, ignore=shutil.ignore_patterns(".git"))
+                shutil.copytree(static_resources_dir, work_path / "static-resources")
+                each_details["temp_dir"] = temp_dir
+                each_details["work_path"] = str(work_path)
 
-            # TODO: Workaround to align the frameworl
-            # Evaluation isolates each run by copying the full snapshot (agent-workdir + static-resources +
-            # static-resources-compliant) into a fresh working directory. Ideally AUB (Agent under Bench) would run inside that
-            # complete workdir so fetch.sh needs no fixup. Currently AUB runs against snapshot paths directly,
-            # so fetch.sh embeds the snapshot path — replaced here at evaluation time.
-            fetch_script = work_path / "fetch.sh"
-            content = fetch_script.read_text()
-            content = content.replace(str(static_resources), "static-resources")
-            content = content.replace(str(agent_workdir), ".")
-            fetch_script.write_text(content)
+                # TODO: Workaround to align the frameworl
+                # Evaluation isolates each run by copying the full snapshot (agent-workdir + static-resources +
+                # static-resources-compliant) into a fresh working directory. Ideally AUB (Agent under Bench) would run inside that
+                # complete workdir so fetch.sh needs no fixup. Currently AUB runs against snapshot paths directly,
+                # so fetch.sh embeds the snapshot path — replaced here at evaluation time.
+                fetch_script = work_path / "fetch.sh"
+                content = fetch_script.read_text()
+                content = content.replace(str(static_resources), "static-resources")
+                content = content.replace(str(agent_workdir), ".")
+                fetch_script.write_text(content)
 
-            # Criterion 2: Execute fetch.sh and check for collected_data.json
-            fetch_success, fetch_details = self._run_fetch_script(work_path)
+                # Criterion 2: Execute fetch.sh and check for collected_data.json
+                fetch_success, fetch_details = self._run_fetch_script(work_path)
+                each_scores["fetch_generates_data"] = {
+                    "calculation": 1 if fetch_success else 0,
+                    "justification": fetch_details,
+                    "details": {},
+                }
+
+                each_details["scores"] = each_scores
+                if each_scores["fetch_generates_data"]["calculation"] == 0:
+                    return each_details
+
+                # Criterion 3: OPA violation detection (should return false)
+                violation_result, violation_details = self._run_opa_eval(work_path)
+                violation_pass = violation_result is False
+                each_scores["violation_detection"] = {
+                    "calculation": 1 if violation_pass else 0,
+                    "justification": violation_details,
+                    "details": {"opa_result": violation_result},
+                }
+
+                each_details["violation_check_result"] = violation_result
+                return each_details
+
+            violation_dirs = sorted(scenario_dir.glob("static-resources-violation-*"))
+            # Fallback to default static-resources directory (legacy scenarios)
+            if not violation_dirs:
+                default_dir = scenario_dir / "static-resources"
+                if default_dir.exists():
+                    violation_dirs = [default_dir]
+
+            violation_details_list = []
+            for violation_dir in violation_dirs:
+                details_per_violation = fetch_and_check(violation_dir)
+                violation_details_list.append(details_per_violation)
+
+            # Aggregate fetch_generates_data scores
+            all_fetch_success = all(
+                d["scores"]["fetch_generates_data"]["calculation"] == 1
+                for d in violation_details_list
+            )
+            fetch_justifications = [
+                d["scores"]["fetch_generates_data"]["justification"]
+                for d in violation_details_list
+            ]
+            combined_fetch_justification = "; ".join(fetch_justifications) if len(fetch_justifications) > 1 else fetch_justifications[0]
+            
             scores["fetch_generates_data"] = {
-                "calculation": 1 if fetch_success else 0,
-                "justification": fetch_details,
+                "calculation": 1 if all_fetch_success else 0,
+                "justification": combined_fetch_justification,
                 "details": {},
             }
 
-            if not fetch_success:
+            if not all_fetch_success:
                 return self._create_result(scenario_id, trial_id, scores, details)
 
-            # Criterion 3: OPA violation detection (should return false)
-            violation_result, violation_details = self._run_opa_eval(work_path)
-            violation_pass = violation_result is False
+            # Aggregate violation_detection scores
+            # All violations must pass for overall success
+            all_violations_pass = all(
+                d["scores"]["violation_detection"]["calculation"] == 1
+                for d in violation_details_list
+            )
+            
+            # Collect justifications from all violation checks
+            violation_justifications = [
+                d["scores"]["violation_detection"]["justification"]
+                for d in violation_details_list
+            ]
+            combined_violation_justification = "; ".join(violation_justifications) if len(violation_justifications) > 1 else violation_justifications[0]
+            
+            # Collect all OPA results
+            opa_results = [d["violation_check_result"] for d in violation_details_list]
+            
             scores["violation_detection"] = {
-                "calculation": 1 if violation_pass else 0,
-                "justification": violation_details,
-                "details": {"opa_result": violation_result},
+                "calculation": 1 if all_violations_pass else 0,
+                "justification": combined_violation_justification,
+                "details": {"opa_result": opa_results[0] if len(opa_results) == 1 else opa_results},
             }
-
-            details["violation_check_result"] = violation_result
+            
+            # For backward compatibility: single result if only one dir, array if multiple
+            if len(violation_details_list) == 1:
+                details["violation_check_result"] = violation_details_list[0]["violation_check_result"]
+            else:
+                details["violation_check_result"] = opa_results
+            
+            details["violation_details_list"] = violation_details_list
 
             # Criterion 4: Replace resources and verify compliance
-            replace_success = self._replace_with_compliant_resources(
-                work_path, compliant_resources
+            compliance_details_result = fetch_and_check(compliant_resources)
+            
+            # Check if fetch succeeded for compliant resources
+            compliance_fetch_success = (
+                compliance_details_result["scores"]["fetch_generates_data"]["calculation"] == 1
             )
-            details["compliant_resources_replaced"] = replace_success
-
-            if not replace_success:
+            
+            if not compliance_fetch_success:
                 scores["compliance_validation"] = {
                     "calculation": 0,
-                    "justification": "Failed to replace with compliant resources",
+                    "justification": compliance_details_result["scores"]["fetch_generates_data"]["justification"],
                     "details": {},
                 }
                 return self._create_result(scenario_id, trial_id, scores, details)
 
-            # Re-run fetch.sh with compliant resources
-            (work_path / "collected_data.json").unlink(missing_ok=True)
-            fetch_success_2, _ = self._run_fetch_script(work_path)
-
-            if not fetch_success_2:
-                scores["compliance_validation"] = {
-                    "calculation": 0,
-                    "justification": "fetch.sh failed with compliant resources",
-                    "details": {},
-                }
-                return self._create_result(scenario_id, trial_id, scores, details)
-
-            # Run OPA again (should return true for compliant resources)
-            compliance_result, compliance_details = self._run_opa_eval(work_path)
+            # Use the compliance check result from fetch_and_check
+            compliance_result = compliance_details_result["violation_check_result"]
             compliance_pass = compliance_result is True
             scores["compliance_validation"] = {
                 "calculation": 1 if compliance_pass else 0,
-                "justification": compliance_details,
+                "justification": compliance_details_result["scores"]["violation_detection"]["justification"],
                 "details": {"opa_result": compliance_result},
             }
 
             details["compliance_check_result"] = compliance_result
+            details["compliance_details"] = compliance_details_result
 
         except Exception as e:
             logger.error(f"Evaluation failed for {scenario_id}/{trial_id}: {e}")
